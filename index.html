@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SimpleExpense</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>💰 Трекер Расходов</h1>
+        <div class="input-group">
+            <input type="text" id="title-input" placeholder="Название (например, Такси)">
+            <input type="number" id="amount-input" placeholder="Сумма">
+            <button id="add-btn">Добавить</button>
+        </div>
+        <ul id="expense-list">
+            <!-- Сюда будут падать расходы -->
+        </ul>
+        <div class="total">Итого: <span id="total-amount">0</span> руб.</div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
