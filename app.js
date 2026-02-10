@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, doc, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// --- ВСТАВЬ КОНФИГ СЮДА ---
+// --- КОНФИГ ---
 const firebaseConfig = {
     apiKey: "AIzaSy.....",
     authDomain: "simpleexpense-lab.firebaseapp.com",
@@ -11,7 +11,7 @@ const firebaseConfig = {
     messagingSenderId: "...",
     appId: "..."
 };
-// -------------------------
+// -------------
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -23,6 +23,7 @@ let currentUser = null;
 let expensesData = [];
 let chartInstance = null;
 let editingId = null;
+let currentCurrency = localStorage.getItem('currency') || 'RUB'; // Дефолтная валюта
 
 // DOM Элементы
 const els = {
@@ -31,29 +32,25 @@ const els = {
     login: document.getElementById('login-btn'),
     logout: document.getElementById('logout-btn'),
     themeToggle: document.getElementById('theme-toggle'),
+    currencySelect: document.getElementById('currency-select'),
     avatar: document.getElementById('user-avatar'),
     name: document.getElementById('user-name'),
 
-    // Баланс
     totalBalance: document.getElementById('total-balance'),
     totalIncome: document.getElementById('total-income'),
     totalExpense: document.getElementById('total-expense'),
     filter: document.getElementById('filter-month'),
 
-    // Форма
     form: document.getElementById('expense-form'),
     title: document.getElementById('title-input'),
     amount: document.getElementById('amount-input'),
     category: document.getElementById('category-input'),
     date: document.getElementById('date-input'),
-    typeRadios: document.getElementsByName('type'),
 
-    // Список
     container: document.getElementById('transactions-container'),
     loader: document.getElementById('loader'),
     empty: document.getElementById('empty-state'),
 
-    // Модалка
     modal: document.getElementById('edit-modal'),
     modalClose: document.getElementById('close-modal'),
     editTitle: document.getElementById('edit-title'),
@@ -61,42 +58,66 @@ const els = {
     saveEdit: document.getElementById('save-edit')
 };
 
-// Конфигурация категорий
-const CATEGORIES = {
-    expense: [
-        { id: 'food', name: 'Еда', icon: 'fa-burger', color: '#EF4444' },
-        { id: 'transport', name: 'Транспорт', icon: 'fa-taxi', color: '#F59E0B' },
-        { id: 'home', name: 'Жилье', icon: 'fa-house', color: '#6366F1' },
-        { id: 'shop', name: 'Шопинг', icon: 'fa-bag-shopping', color: '#EC4899' },
-        { id: 'fun', name: 'Развлечения', icon: 'fa-gamepad', color: '#8B5CF6' }
-    ],
-    income: [
-        { id: 'salary', name: 'Зарплата', icon: 'fa-money-bill-wave', color: '#10B981' },
-        { id: 'gift', name: 'Подарок', icon: 'fa-gift', color: '#3B82F6' },
-        { id: 'other', name: 'Другое', icon: 'fa-circle-plus', color: '#64748B' }
-    ]
+// Конфигурация
+const CONFIG = {
+    currencies: {
+        'RUB': { locale: 'ru-RU', symbol: '₽' },
+        'BYN': { locale: 'be-BY', symbol: 'Br' },
+        'USD': { locale: 'en-US', symbol: '$' },
+        'EUR': { locale: 'de-DE', symbol: '€' }
+    },
+    categories: {
+        expense: [
+            { id: 'food', name: 'Еда', icon: 'fa-burger', color: '#EF4444' },
+            { id: 'transport', name: 'Транспорт', icon: 'fa-taxi', color: '#F59E0B' },
+            { id: 'home', name: 'Жилье', icon: 'fa-house', color: '#6366F1' },
+            { id: 'shop', name: 'Шопинг', icon: 'fa-bag-shopping', color: '#EC4899' },
+            { id: 'fun', name: 'Развлечения', icon: 'fa-gamepad', color: '#8B5CF6' }
+        ],
+        income: [
+            { id: 'salary', name: 'Зарплата', icon: 'fa-money-bill-wave', color: '#10B981' },
+            { id: 'gift', name: 'Подарок', icon: 'fa-gift', color: '#3B82F6' },
+            { id: 'other', name: 'Другое', icon: 'fa-circle-plus', color: '#64748B' }
+        ]
+    }
 };
 
 // --- INIT ---
 initTheme();
-els.dateInput.valueAsDate = new Date();
-updateCategoryOptions('expense'); // По умолчанию расход
+initCurrency();
+if(els.date) els.date.valueAsDate = new Date();
+updateCategoryOptions('expense');
 
-// Слушатель смены типа (Доход/Расход)
 document.querySelectorAll('input[name="type"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        updateCategoryOptions(e.target.value);
-    });
+    radio.addEventListener('change', (e) => updateCategoryOptions(e.target.value));
 });
 
 function updateCategoryOptions(type) {
-    els.category.innerHTML = CATEGORIES[type].map(c =>
-        `<option value="${c.id}">${c.name}</option>`
-    ).join('');
+    els.category.innerHTML = CONFIG.categories[type].map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+// --- CURRENCY LOGIC ---
+function initCurrency() {
+    els.currencySelect.value = currentCurrency;
+    els.currencySelect.addEventListener('change', (e) => {
+        currentCurrency = e.target.value;
+        localStorage.setItem('currency', currentCurrency);
+        renderAll(); // Перерисовка с новой валютой
+    });
+}
+
+function formatMoney(amount) {
+    const conf = CONFIG.currencies[currentCurrency];
+    return new Intl.NumberFormat(conf.locale, {
+        style: 'currency',
+        currency: currentCurrency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    }).format(amount);
 }
 
 // --- AUTH ---
-els.login.addEventListener('click', () => signInWithPopup(auth, provider).catch(err => showToast('Ошибка входа', 'error')));
+els.login.addEventListener('click', () => signInWithPopup(auth, provider).catch(e => showToast('Ошибка входа', 'error')));
 els.logout.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, (user) => {
@@ -105,9 +126,9 @@ onAuthStateChanged(auth, (user) => {
         els.auth.classList.add('hidden');
         els.app.classList.remove('hidden');
         els.avatar.src = user.photoURL;
-        els.name.textContent = user.displayName.split(' ')[0];
+        els.name.textContent = user.displayName ? user.displayName.split(' ')[0] : 'User';
         subscribeToData();
-        showToast(`Добро пожаловать, ${user.displayName.split(' ')[0]}!`, 'success');
+        showToast('Добро пожаловать!', 'success');
     } else {
         currentUser = null;
         els.app.classList.add('hidden');
@@ -127,11 +148,11 @@ function subscribeToData() {
         renderAll();
     }, (error) => {
         console.error(error);
-        if(error.code === 'failed-precondition') alert("Требуется индекс! См. консоль.");
+        if(error.code === 'failed-precondition') alert("Ошибка: Создай индекс в Firebase Console (см. F12)");
     });
 }
 
-// --- LOGIC & RENDER ---
+// --- RENDER ---
 els.filter.addEventListener('change', renderAll);
 
 function renderAll() {
@@ -155,10 +176,9 @@ function renderStats(data) {
         else expense += item.amount;
     });
 
-    // Анимация чисел
-    animateValue(els.totalIncome, income);
-    animateValue(els.totalExpense, expense);
-    animateValue(els.totalBalance, income - expense);
+    els.totalIncome.innerText = formatMoney(income);
+    els.totalExpense.innerText = formatMoney(expense);
+    els.totalBalance.innerText = formatMoney(income - expense);
 }
 
 function renderList(data) {
@@ -170,7 +190,6 @@ function renderList(data) {
     }
     els.empty.classList.add('hidden');
 
-    // Группировка по дате
     const grouped = data.reduce((groups, item) => {
         const date = item.date;
         if (!groups[date]) groups[date] = [];
@@ -184,14 +203,16 @@ function renderList(data) {
         dayGroup.innerHTML = `<h4>${formatDate(date)}</h4>`;
 
         grouped[date].forEach(item => {
-            const catConfig = [...CATEGORIES.expense, ...CATEGORIES.income].find(c => c.id === item.category) || CATEGORIES.expense[0];
+            const catType = item.type || 'expense';
+            const catList = CONFIG.categories[catType] || CONFIG.categories.expense;
+            const catConfig = catList.find(c => c.id === item.category) || catList[0];
             const isIncome = item.type === 'income';
 
             const el = document.createElement('div');
             el.className = 'transaction-item';
             el.innerHTML = `
                 <div class="t-left">
-                    <div class="icon-box" style="background: ${catConfig.color}20; color: ${catConfig.color}">
+                    <div class="icon-box" style="background: ${catConfig.color}15; color: ${catConfig.color}">
                         <i class="fa-solid ${catConfig.icon}"></i>
                     </div>
                     <div class="t-info">
@@ -205,8 +226,8 @@ function renderList(data) {
                     </span>
                 </div>
                 <div class="t-actions">
-                    <button class="mini-btn edit" onclick="editItem('${item.id}')"><i class="fa-solid fa-pen"></i></button>
-                    <button class="mini-btn del" onclick="deleteItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
+                    <button class="mini-btn edit" onclick="window.editItem('${item.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="mini-btn del" onclick="window.deleteItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
                 </div>
             `;
             dayGroup.appendChild(el);
@@ -217,27 +238,21 @@ function renderList(data) {
 
 function renderChart(data) {
     const ctx = document.getElementById('expensesChart').getContext('2d');
-    const expenses = data.filter(i => i.type === 'expense');
+    const expenses = data.filter(i => (!i.type || i.type === 'expense'));
 
-    // Группировка по категориям
     const cats = {};
-    expenses.forEach(i => {
-        cats[i.category] = (cats[i.category] || 0) + i.amount;
-    });
+    expenses.forEach(i => { cats[i.category] = (cats[i.category] || 0) + i.amount; });
 
-    if (Object.keys(cats).length === 0) {
-        if (chartInstance) {
-            chartInstance.data.datasets[0].data = [];
-            chartInstance.update();
-        }
-        return;
-    }
-
-    const labels = Object.keys(cats).map(id => CATEGORIES.expense.find(c => c.id === id)?.name || id);
-    const colors = Object.keys(cats).map(id => CATEGORIES.expense.find(c => c.id === id)?.color || '#ccc');
+    const labels = Object.keys(cats).map(id =>
+        CONFIG.categories.expense.find(c => c.id === id)?.name || id
+    );
+    const colors = Object.keys(cats).map(id =>
+        CONFIG.categories.expense.find(c => c.id === id)?.color || '#ccc'
+    );
 
     if (chartInstance) chartInstance.destroy();
 
+    // Кастомный тултип для валюты
     chartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -246,13 +261,22 @@ function renderChart(data) {
                 data: Object.values(cats),
                 backgroundColor: colors,
                 borderWidth: 0,
-                hoverOffset: 10
+                hoverOffset: 8
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.label}: ${formatMoney(context.raw)}`;
+                        }
+                    }
+                }
+            },
             cutout: '75%'
         }
     });
@@ -275,18 +299,14 @@ els.form.addEventListener('submit', async (e) => {
         });
         els.form.reset();
         els.date.valueAsDate = new Date();
-        showToast('Запись добавлена', 'success');
-    } catch (err) {
-        showToast('Ошибка добавления', 'error');
-    }
+        showToast('Сохранено', 'success');
+    } catch (err) { showToast('Ошибка', 'error'); }
 });
 
 window.deleteItem = async (id) => {
-    if(confirm('Удалить запись?')) {
-        try {
-            await deleteDoc(doc(db, "expenses", id));
-            showToast('Удалено', 'success');
-        } catch(e) { showToast('Ошибка', 'error'); }
+    if(confirm('Удалить?')) {
+        await deleteDoc(doc(db, "expenses", id));
+        showToast('Удалено', 'success');
     }
 };
 
@@ -301,14 +321,12 @@ window.editItem = (id) => {
 
 els.saveEdit.addEventListener('click', async () => {
     if(!editingId) return;
-    try {
-        await updateDoc(doc(db, "expenses", editingId), {
-            title: els.editTitle.value,
-            amount: Number(els.editAmount.value)
-        });
-        els.modal.classList.add('hidden');
-        showToast('Обновлено', 'success');
-    } catch(e) { showToast('Ошибка', 'error'); }
+    await updateDoc(doc(db, "expenses", editingId), {
+        title: els.editTitle.value,
+        amount: Number(els.editAmount.value)
+    });
+    els.modal.classList.add('hidden');
+    showToast('Обновлено', 'success');
 });
 
 els.modalClose.addEventListener('click', () => els.modal.classList.add('hidden'));
@@ -328,16 +346,12 @@ function initTheme() {
     if (saved === 'dark') els.themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
 }
 
-function showToast(msg, type = 'success') {
+function showToast(msg, type) {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i> ${msg}`;
     document.getElementById('toast-container').appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
-}
-
-function formatMoney(num) {
-    return new Intl.NumberFormat('ru-RU').format(num) + ' ₽';
 }
 
 function formatDate(dateStr) {
@@ -349,20 +363,4 @@ function formatDate(dateStr) {
     if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
 
     return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
-}
-
-function animateValue(obj, end) {
-    const start = parseInt(obj.innerText.replace(/\D/g, '')) || 0;
-    if (start === end) return;
-    const duration = 500;
-    let startTime = null;
-
-    function step(timestamp) {
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / duration, 1);
-        const current = Math.floor(progress * (end - start) + start);
-        obj.innerText = formatMoney(current);
-        if (progress < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
 }
