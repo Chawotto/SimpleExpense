@@ -2,22 +2,122 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>SimpleExpense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinanceFlow Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Библиотека для графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>💰 Трекер Расходов</h1>
-        <div class="input-group">
-            <input type="text" id="title-input" placeholder="Название (например, Такси)">
-            <input type="number" id="amount-input" placeholder="Сумма">
-            <button id="add-btn">Добавить</button>
-        </div>
-        <ul id="expense-list">
-            <!-- Сюда будут падать расходы -->
-        </ul>
-        <div class="total">Итого: <span id="total-amount">0</span> руб.</div>
+
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
     </div>
-    <script src="app.js"></script>
+
+    <!-- Авторизация -->
+    <section id="auth-section" class="glass-panel active">
+        <div class="logo-area">
+            <i class="fa-solid fa-wallet logo-icon"></i>
+            <h1>Finance<span class="accent">Flow</span></h1>
+        </div>
+        <p>Умный учет ваших финансов</p>
+        <button id="login-btn" class="glow-on-hover">
+            <i class="fa-brands fa-google"></i> Войти через Google
+        </button>
+    </section>
+
+    <!-- Приложение -->
+    <section id="app-section" class="glass-panel app-panel hidden">
+        <header>
+            <div class="user-profile">
+                <img id="user-avatar" src="" alt="Avatar">
+                <div class="user-text">
+                    <span class="welcome">Привет,</span>
+                    <span id="user-name" class="name">User</span>
+                </div>
+            </div>
+            <button id="logout-btn" class="icon-btn" title="Выйти">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </header>
+
+        <!-- Блок баланса и графика -->
+        <div class="dashboard-grid">
+            <div class="balance-card">
+                <h3>Всего потрачено</h3>
+                <div class="amount"><span id="total-amount">0</span> ₽</div>
+                <div class="month-selector">
+                    <i class="fa-regular fa-calendar"></i>
+                    <select id="filter-month">
+                        <option value="all">За всё время</option>
+                        <option value="current" selected>Этот месяц</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="expensesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Форма добавления -->
+        <form id="expense-form">
+            <div class="form-row">
+                <div class="input-group">
+                    <input type="text" id="title-input" placeholder="Название" required>
+                </div>
+                <div class="input-group">
+                    <input type="number" id="amount-input" placeholder="Сумма" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="input-group">
+                    <select id="category-input">
+                        <option value="food">🍔 Еда</option>
+                        <option value="transport">🚖 Транспорт</option>
+                        <option value="home">🏠 Жилье</option>
+                        <option value="fun">🎬 Развлечения</option>
+                        <option value="shopping">🛍️ Шопинг</option>
+                        <option value="other">📦 Другое</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <input type="date" id="date-input" required>
+                </div>
+            </div>
+            <button type="submit" id="add-btn" class="primary-btn">
+                Добавить операцию
+            </button>
+        </form>
+
+        <!-- Список -->
+        <div class="list-wrapper">
+            <h4>Последние операции</h4>
+            <ul id="expense-list"></ul>
+            <div id="loader" class="loader hidden"></div>
+            <div id="empty-state" class="hidden">
+                <i class="fa-solid fa-receipt"></i>
+                <p>Пока нет операций</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Модальное окно редактирования -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <h3>Редактировать запись</h3>
+            <input type="text" id="edit-title" placeholder="Название">
+            <input type="number" id="edit-amount" placeholder="Сумма">
+            <div class="modal-actions">
+                <button id="cancel-edit" class="secondary-btn">Отмена</button>
+                <button id="save-edit" class="primary-btn">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>
