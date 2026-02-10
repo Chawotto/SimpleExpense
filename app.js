@@ -4,12 +4,12 @@ import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, 
 
 // --- ВСТАВЬ КОНФИГ СЮДА ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCrnduwAzlj_Qw17GsOAYqs9AhDxZPGUBM",
-  authDomain: "simpleexpense-lab.firebaseapp.com",
-  projectId: "simpleexpense-lab",
-  storageBucket: "simpleexpense-lab.firebasestorage.app",
-  messagingSenderId: "975594715737",
-  appId: "1:975594715737:web:884b43c0a3fc4be9cccf48"
+    apiKey: "AIzaSy.....",
+    authDomain: "simpleexpense-lab.firebaseapp.com",
+    projectId: "simpleexpense-lab",
+    storageBucket: "simpleexpense-lab.appspot.com",
+    messagingSenderId: "...",
+    appId: "..."
 };
 // -------------------------
 
@@ -18,110 +18,151 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Переменные состояния
+// Состояние
 let currentUser = null;
-let unsubscribe = null;
-let expensesData = []; // Храним данные локально для графиков и фильтров
-let expenseChart = null; // Объект графика
-let editingId = null; // ID записи, которую редактируем
+let expensesData = [];
+let chartInstance = null;
+let editingId = null;
 
-// DOM элементы
+// DOM Элементы
 const els = {
     auth: document.getElementById('auth-section'),
     app: document.getElementById('app-section'),
     login: document.getElementById('login-btn'),
     logout: document.getElementById('logout-btn'),
+    themeToggle: document.getElementById('theme-toggle'),
     avatar: document.getElementById('user-avatar'),
     name: document.getElementById('user-name'),
-    form: document.getElementById('expense-form'),
-    list: document.getElementById('expense-list'),
-    total: document.getElementById('total-amount'),
+
+    // Баланс
+    totalBalance: document.getElementById('total-balance'),
+    totalIncome: document.getElementById('total-income'),
+    totalExpense: document.getElementById('total-expense'),
     filter: document.getElementById('filter-month'),
-    dateInput: document.getElementById('date-input'),
+
+    // Форма
+    form: document.getElementById('expense-form'),
+    title: document.getElementById('title-input'),
+    amount: document.getElementById('amount-input'),
+    category: document.getElementById('category-input'),
+    date: document.getElementById('date-input'),
+    typeRadios: document.getElementsByName('type'),
+
+    // Список
+    container: document.getElementById('transactions-container'),
     loader: document.getElementById('loader'),
     empty: document.getElementById('empty-state'),
-    // Модальное окно
+
+    // Модалка
     modal: document.getElementById('edit-modal'),
+    modalClose: document.getElementById('close-modal'),
     editTitle: document.getElementById('edit-title'),
     editAmount: document.getElementById('edit-amount'),
-    cancelEdit: document.getElementById('cancel-edit'),
     saveEdit: document.getElementById('save-edit')
 };
 
-// Установка сегодняшней даты в инпут
-els.dateInput.valueAsDate = new Date();
+// Конфигурация категорий
+const CATEGORIES = {
+    expense: [
+        { id: 'food', name: 'Еда', icon: 'fa-burger', color: '#EF4444' },
+        { id: 'transport', name: 'Транспорт', icon: 'fa-taxi', color: '#F59E0B' },
+        { id: 'home', name: 'Жилье', icon: 'fa-house', color: '#6366F1' },
+        { id: 'shop', name: 'Шопинг', icon: 'fa-bag-shopping', color: '#EC4899' },
+        { id: 'fun', name: 'Развлечения', icon: 'fa-gamepad', color: '#8B5CF6' }
+    ],
+    income: [
+        { id: 'salary', name: 'Зарплата', icon: 'fa-money-bill-wave', color: '#10B981' },
+        { id: 'gift', name: 'Подарок', icon: 'fa-gift', color: '#3B82F6' },
+        { id: 'other', name: 'Другое', icon: 'fa-circle-plus', color: '#64748B' }
+    ]
+};
 
-// --- АВТОРИЗАЦИЯ ---
-els.login.addEventListener('click', () => signInWithPopup(auth, provider).catch(alert));
+// --- INIT ---
+initTheme();
+els.dateInput.valueAsDate = new Date();
+updateCategoryOptions('expense'); // По умолчанию расход
+
+// Слушатель смены типа (Доход/Расход)
+document.querySelectorAll('input[name="type"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        updateCategoryOptions(e.target.value);
+    });
+});
+
+function updateCategoryOptions(type) {
+    els.category.innerHTML = CATEGORIES[type].map(c =>
+        `<option value="${c.id}">${c.name}</option>`
+    ).join('');
+}
+
+// --- AUTH ---
+els.login.addEventListener('click', () => signInWithPopup(auth, provider).catch(err => showToast('Ошибка входа', 'error')));
 els.logout.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUser = user;
-        toggleView(true);
+        els.auth.classList.add('hidden');
+        els.app.classList.remove('hidden');
         els.avatar.src = user.photoURL;
         els.name.textContent = user.displayName.split(' ')[0];
         subscribeToData();
+        showToast(`Добро пожаловать, ${user.displayName.split(' ')[0]}!`, 'success');
     } else {
         currentUser = null;
-        toggleView(false);
-        if (unsubscribe) unsubscribe();
+        els.app.classList.add('hidden');
+        els.auth.classList.remove('hidden');
     }
 });
 
-function toggleView(isAuth) {
-    els.auth.classList.toggle('hidden', isAuth);
-    els.auth.classList.toggle('active', !isAuth);
-    els.app.classList.toggle('hidden', !isAuth);
-    els.app.classList.toggle('active', isAuth);
-}
-
-// --- БАЗА ДАННЫХ ---
+// --- FIRESTORE ---
 function subscribeToData() {
     els.loader.classList.remove('hidden');
-    // Сортировка по дате, которую мы записываем строкой YYYY-MM-DD
-    const q = query(
-        collection(db, "expenses"),
-        where("uid", "==", currentUser.uid),
-        orderBy("date", "desc")
-    );
+    const q = query(collection(db, "expenses"), where("uid", "==", currentUser.uid), orderBy("date", "desc"));
 
-    unsubscribe = onSnapshot(q, (snapshot) => {
+    onSnapshot(q, (snapshot) => {
         els.loader.classList.add('hidden');
         expensesData = [];
-
-        snapshot.forEach(doc => {
-            expensesData.push({ id: doc.id, ...doc.data() });
-        });
-
-        applyFilterAndRender();
+        snapshot.forEach(doc => expensesData.push({ id: doc.id, ...doc.data() }));
+        renderAll();
     }, (error) => {
-        console.error("Firestore Error:", error);
-        // Если ошибка индекса, просто покажем что есть, но предупредим в консоли
-        if(error.code === 'failed-precondition') alert("Требуется индекс! Проверь консоль (F12).");
+        console.error(error);
+        if(error.code === 'failed-precondition') alert("Требуется индекс! См. консоль.");
     });
 }
 
-// --- ФИЛЬТРАЦИЯ И РЕНДЕР ---
-els.filter.addEventListener('change', applyFilterAndRender);
+// --- LOGIC & RENDER ---
+els.filter.addEventListener('change', renderAll);
 
-function applyFilterAndRender() {
-    const filterType = els.filter.value;
+function renderAll() {
+    const filter = els.filter.value;
     let filtered = expensesData;
 
-    if (filterType === 'current') {
-        const now = new Date();
-        const currentMonth = now.toISOString().slice(0, 7); // "2023-10"
-        filtered = expensesData.filter(e => e.date.startsWith(currentMonth));
+    if (filter === 'current') {
+        const month = new Date().toISOString().slice(0, 7);
+        filtered = expensesData.filter(item => item.date.startsWith(month));
     }
 
+    renderStats(filtered);
     renderList(filtered);
-    updateChart(filtered);
-    updateTotal(filtered);
+    renderChart(filtered);
+}
+
+function renderStats(data) {
+    let income = 0, expense = 0;
+    data.forEach(item => {
+        if (item.type === 'income') income += item.amount;
+        else expense += item.amount;
+    });
+
+    // Анимация чисел
+    animateValue(els.totalIncome, income);
+    animateValue(els.totalExpense, expense);
+    animateValue(els.totalBalance, income - expense);
 }
 
 function renderList(data) {
-    els.list.innerHTML = '';
+    els.container.innerHTML = '';
 
     if (data.length === 0) {
         els.empty.classList.remove('hidden');
@@ -129,136 +170,199 @@ function renderList(data) {
     }
     els.empty.classList.add('hidden');
 
-    const categoryIcons = {
-        food: '🍔', transport: '🚖', home: '🏠', fun: '🎬', shopping: '🛍️', other: '📦'
-    };
+    // Группировка по дате
+    const grouped = data.reduce((groups, item) => {
+        const date = item.date;
+        if (!groups[date]) groups[date] = [];
+        groups[date].push(item);
+        return groups;
+    }, {});
 
-    data.forEach(item => {
-        const li = document.createElement('li');
-        li.innerHTML = `
-            <div class="item-info">
-                <span>${categoryIcons[item.category] || '📦'} ${item.title}</span>
-                <span class="item-date">${item.date.split('-').reverse().join('.')}</span>
-            </div>
-            <div class="item-actions">
-                <span class="cost">-${item.amount} ₽</span>
-                <button class="action-btn edit-btn" onclick="openEdit('${item.id}')"><i class="fa-solid fa-pen"></i></button>
-                <button class="action-btn delete-btn" onclick="deleteItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
-            </div>
-        `;
-        els.list.appendChild(li);
+    Object.keys(grouped).sort().reverse().forEach(date => {
+        const dayGroup = document.createElement('div');
+        dayGroup.className = 'date-group';
+        dayGroup.innerHTML = `<h4>${formatDate(date)}</h4>`;
+
+        grouped[date].forEach(item => {
+            const catConfig = [...CATEGORIES.expense, ...CATEGORIES.income].find(c => c.id === item.category) || CATEGORIES.expense[0];
+            const isIncome = item.type === 'income';
+
+            const el = document.createElement('div');
+            el.className = 'transaction-item';
+            el.innerHTML = `
+                <div class="t-left">
+                    <div class="icon-box" style="background: ${catConfig.color}20; color: ${catConfig.color}">
+                        <i class="fa-solid ${catConfig.icon}"></i>
+                    </div>
+                    <div class="t-info">
+                        <span class="t-title">${item.title}</span>
+                        <span class="t-cat">${catConfig.name}</span>
+                    </div>
+                </div>
+                <div class="t-right">
+                    <span class="t-amount ${isIncome ? 'income' : 'expense'}">
+                        ${isIncome ? '+' : '-'}${formatMoney(item.amount)}
+                    </span>
+                </div>
+                <div class="t-actions">
+                    <button class="mini-btn edit" onclick="editItem('${item.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="mini-btn del" onclick="deleteItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+            dayGroup.appendChild(el);
+        });
+        els.container.appendChild(dayGroup);
     });
 }
 
-function updateTotal(data) {
-    const sum = data.reduce((acc, item) => acc + item.amount, 0);
-    // Анимация числа
-    const start = parseInt(els.total.innerText) || 0;
-    const duration = 500;
-    let startTime = null;
+function renderChart(data) {
+    const ctx = document.getElementById('expensesChart').getContext('2d');
+    const expenses = data.filter(i => i.type === 'expense');
 
-    function step(timestamp) {
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / duration, 1);
-        els.total.innerText = Math.floor(progress * (sum - start) + start);
-        if (progress < 1) requestAnimationFrame(step);
+    // Группировка по категориям
+    const cats = {};
+    expenses.forEach(i => {
+        cats[i.category] = (cats[i.category] || 0) + i.amount;
+    });
+
+    if (Object.keys(cats).length === 0) {
+        if (chartInstance) {
+            chartInstance.data.datasets[0].data = [];
+            chartInstance.update();
+        }
+        return;
     }
-    requestAnimationFrame(step);
+
+    const labels = Object.keys(cats).map(id => CATEGORIES.expense.find(c => c.id === id)?.name || id);
+    const colors = Object.keys(cats).map(id => CATEGORIES.expense.find(c => c.id === id)?.color || '#ccc');
+
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: Object.values(cats),
+                backgroundColor: colors,
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            cutout: '75%'
+        }
+    });
 }
 
-// --- ДОБАВЛЕНИЕ ---
+// --- CRUD ---
 els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const title = document.getElementById('title-input').value;
-    const amount = Number(document.getElementById('amount-input').value);
-    const category = document.getElementById('category-input').value;
-    const date = els.dateInput.value;
+    const type = document.querySelector('input[name="type"]:checked').value;
 
     try {
         await addDoc(collection(db, "expenses"), {
             uid: currentUser.uid,
-            title, amount, category, date,
+            title: els.title.value,
+            amount: Number(els.amount.value),
+            category: els.category.value,
+            date: els.date.value,
+            type: type,
             createdAt: new Date().toISOString()
         });
         els.form.reset();
-        els.dateInput.valueAsDate = new Date(); // Вернуть дату на сегодня
+        els.date.valueAsDate = new Date();
+        showToast('Запись добавлена', 'success');
     } catch (err) {
-        console.error(err);
+        showToast('Ошибка добавления', 'error');
     }
 });
 
-// --- УДАЛЕНИЕ И РЕДАКТИРОВАНИЕ (Глобальные функции) ---
 window.deleteItem = async (id) => {
     if(confirm('Удалить запись?')) {
-        await deleteDoc(doc(db, "expenses", id));
+        try {
+            await deleteDoc(doc(db, "expenses", id));
+            showToast('Удалено', 'success');
+        } catch(e) { showToast('Ошибка', 'error'); }
     }
 };
 
-window.openEdit = (id) => {
-    const item = expensesData.find(e => e.id === id);
+window.editItem = (id) => {
+    const item = expensesData.find(i => i.id === id);
     if (!item) return;
-
     editingId = id;
     els.editTitle.value = item.title;
     els.editAmount.value = item.amount;
     els.modal.classList.remove('hidden');
 };
 
-els.cancelEdit.addEventListener('click', () => els.modal.classList.add('hidden'));
-
 els.saveEdit.addEventListener('click', async () => {
-    if (!editingId) return;
-    const newTitle = els.editTitle.value;
-    const newAmount = Number(els.editAmount.value);
-
-    await updateDoc(doc(db, "expenses", editingId), {
-        title: newTitle,
-        amount: newAmount
-    });
-
-    els.modal.classList.add('hidden');
-    editingId = null;
+    if(!editingId) return;
+    try {
+        await updateDoc(doc(db, "expenses", editingId), {
+            title: els.editTitle.value,
+            amount: Number(els.editAmount.value)
+        });
+        els.modal.classList.add('hidden');
+        showToast('Обновлено', 'success');
+    } catch(e) { showToast('Ошибка', 'error'); }
 });
 
-// --- ГРАФИК (Chart.js) ---
-function updateChart(data) {
-    const ctx = document.getElementById('expensesChart').getContext('2d');
+els.modalClose.addEventListener('click', () => els.modal.classList.add('hidden'));
 
-    // Группировка по категориям
-    const categories = {};
-    data.forEach(item => {
-        if (!categories[item.category]) categories[item.category] = 0;
-        categories[item.category] += item.amount;
-    });
+// --- THEME & UTILS ---
+els.themeToggle.addEventListener('click', () => {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    els.themeToggle.innerHTML = isDark ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-sun"></i>';
+});
 
-    const labels = Object.keys(categories).map(k => {
-        const names = {food:'Еда', transport:'Транспорт', home:'Жилье', fun:'Развл.', shopping:'Шопинг', other:'Др.'};
-        return names[k] || k;
-    });
-    const values = Object.values(categories);
+function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.body.setAttribute('data-theme', saved);
+    if (saved === 'dark') els.themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
+}
 
-    if (expenseChart) expenseChart.destroy(); // Удаляем старый график
+function showToast(msg, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i> ${msg}`;
+    document.getElementById('toast-container').appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
 
-    // Если нет данных, показываем пустой круг
-    if (values.length === 0) return;
+function formatMoney(num) {
+    return new Intl.NumberFormat('ru-RU').format(num) + ' ₽';
+}
 
-    expenseChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: values,
-                backgroundColor: ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#6b7280'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false } // Скрываем легенду для компактности
-            },
-            cutout: '70%' // Толщина бублика
-        }
-    });
+function formatDate(dateStr) {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Сегодня';
+    if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
+
+    return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+}
+
+function animateValue(obj, end) {
+    const start = parseInt(obj.innerText.replace(/\D/g, '')) || 0;
+    if (start === end) return;
+    const duration = 500;
+    let startTime = null;
+
+    function step(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        const current = Math.floor(progress * (end - start) + start);
+        obj.innerText = formatMoney(current);
+        if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
 }

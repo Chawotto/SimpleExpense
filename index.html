@@ -3,117 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinanceFlow Pro</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>FinanceFlow Ultra</title>
+    <!-- Шрифты и иконки -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Библиотека для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
-    </div>
+    <!-- Фоновые элементы -->
+    <div class="bg-gradient"></div>
+    <div class="bg-blur"></div>
 
-    <!-- Авторизация -->
-    <section id="auth-section" class="glass-panel active">
-        <div class="logo-area">
-            <i class="fa-solid fa-wallet logo-icon"></i>
-            <h1>Finance<span class="accent">Flow</span></h1>
+    <!-- Контейнер уведомлений (Toasts) -->
+    <div id="toast-container"></div>
+
+    <!-- АВТОРИЗАЦИЯ -->
+    <section id="auth-section" class="screen active">
+        <div class="auth-card glass">
+            <div class="logo-box">
+                <i class="fa-solid fa-chart-pie"></i>
+            </div>
+            <h1>Finance<span class="gradient-text">Flow</span></h1>
+            <p class="subtitle">Финансы под полным контролем</p>
+            <button id="login-btn" class="btn btn-google">
+                <i class="fa-brands fa-google"></i> Продолжить через Google
+            </button>
         </div>
-        <p>Умный учет ваших финансов</p>
-        <button id="login-btn" class="glow-on-hover">
-            <i class="fa-brands fa-google"></i> Войти через Google
-        </button>
     </section>
 
-    <!-- Приложение -->
-    <section id="app-section" class="glass-panel app-panel hidden">
-        <header>
-            <div class="user-profile">
-                <img id="user-avatar" src="" alt="Avatar">
-                <div class="user-text">
-                    <span class="welcome">Привет,</span>
-                    <span id="user-name" class="name">User</span>
-                </div>
-            </div>
-            <button id="logout-btn" class="icon-btn" title="Выйти">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
-        </header>
+    <!-- ПРИЛОЖЕНИЕ -->
+    <section id="app-section" class="screen hidden">
+        <div class="app-container">
 
-        <!-- Блок баланса и графика -->
-        <div class="dashboard-grid">
-            <div class="balance-card">
-                <h3>Всего потрачено</h3>
-                <div class="amount"><span id="total-amount">0</span> ₽</div>
-                <div class="month-selector">
-                    <i class="fa-regular fa-calendar"></i>
-                    <select id="filter-month">
+            <!-- Шапка -->
+            <header>
+                <div class="profile">
+                    <img id="user-avatar" src="" alt="Avatar">
+                    <div class="profile-info">
+                        <span class="greeting">Добрый день,</span>
+                        <h3 id="user-name">User</h3>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="theme-toggle" class="icon-btn"><i class="fa-solid fa-moon"></i></button>
+                    <button id="logout-btn" class="icon-btn"><i class="fa-solid fa-right-from-bracket"></i></button>
+                </div>
+            </header>
+
+            <!-- Баланс Карточка -->
+            <div class="balance-card glass">
+                <div class="balance-header">
+                    <span>Текущий баланс</span>
+                    <select id="filter-month" class="glass-select">
+                        <option value="current">Этот месяц</option>
                         <option value="all">За всё время</option>
-                        <option value="current" selected>Этот месяц</option>
                     </select>
                 </div>
+                <div class="total-balance">
+                    <span id="total-balance">0</span> <span class="currency">₽</span>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-item income">
+                        <div class="icon-circle up"><i class="fa-solid fa-arrow-up"></i></div>
+                        <div>
+                            <span class="stat-label">Доход</span>
+                            <span id="total-income" class="stat-value">0 ₽</span>
+                        </div>
+                    </div>
+                    <div class="stat-item expense">
+                        <div class="icon-circle down"><i class="fa-solid fa-arrow-down"></i></div>
+                        <div>
+                            <span class="stat-label">Расход</span>
+                            <span id="total-expense" class="stat-value">0 ₽</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="chart-container">
+
+            <!-- График -->
+            <div class="chart-wrapper glass">
                 <canvas id="expensesChart"></canvas>
+                <div class="chart-center-text">
+                    <span class="chart-label">Расход</span>
+                </div>
             </div>
-        </div>
 
-        <!-- Форма добавления -->
-        <form id="expense-form">
-            <div class="form-row">
-                <div class="input-group">
-                    <input type="text" id="title-input" placeholder="Название" required>
-                </div>
-                <div class="input-group">
-                    <input type="number" id="amount-input" placeholder="Сумма" required>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="input-group">
-                    <select id="category-input">
-                        <option value="food">🍔 Еда</option>
-                        <option value="transport">🚖 Транспорт</option>
-                        <option value="home">🏠 Жилье</option>
-                        <option value="fun">🎬 Развлечения</option>
-                        <option value="shopping">🛍️ Шопинг</option>
-                        <option value="other">📦 Другое</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <input type="date" id="date-input" required>
-                </div>
-            </div>
-            <button type="submit" id="add-btn" class="primary-btn">
-                Добавить операцию
-            </button>
-        </form>
+            <!-- Форма добавления -->
+            <div class="action-area">
+                <h3>Новая операция</h3>
 
-        <!-- Список -->
-        <div class="list-wrapper">
-            <h4>Последние операции</h4>
-            <ul id="expense-list"></ul>
-            <div id="loader" class="loader hidden"></div>
-            <div id="empty-state" class="hidden">
-                <i class="fa-solid fa-receipt"></i>
-                <p>Пока нет операций</p>
+                <!-- Переключатель Типа -->
+                <div class="type-toggle">
+                    <input type="radio" name="type" id="type-expense" value="expense" checked>
+                    <label for="type-expense" class="toggle-btn expense">Расход</label>
+
+                    <input type="radio" name="type" id="type-income" value="income">
+                    <label for="type-income" class="toggle-btn income">Доход</label>
+                </div>
+
+                <form id="expense-form">
+                    <div class="input-row">
+                        <div class="input-wrap">
+                            <i class="fa-solid fa-pen"></i>
+                            <input type="text" id="title-input" placeholder="Название (Такси, Зарплата)" required>
+                        </div>
+                        <div class="input-wrap">
+                            <i class="fa-solid fa-ruble-sign"></i>
+                            <input type="number" id="amount-input" placeholder="Сумма" required inputmode="numeric">
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <select id="category-input" class="styled-input">
+                            <!-- Категории генерируются JS -->
+                        </select>
+                        <input type="date" id="date-input" class="styled-input" required>
+                    </div>
+
+                    <button type="submit" id="add-btn" class="btn btn-primary">
+                        <i class="fa-solid fa-plus"></i> Добавить
+                    </button>
+                </form>
             </div>
+
+            <!-- История транзакций -->
+            <div class="history-section">
+                <h3>История операций</h3>
+                <div id="loader" class="loader hidden"></div>
+                <div id="transactions-container">
+                    <!-- Сюда JS вставит сгруппированные списки -->
+                </div>
+                <div id="empty-state" class="hidden">
+                    <img src="https://cdn-icons-png.flaticon.com/512/4076/4076432.png" alt="Empty">
+                    <p>Операций пока нет</p>
+                </div>
+            </div>
+
         </div>
     </section>
 
-    <!-- Модальное окно редактирования -->
-    <div id="edit-modal" class="modal hidden">
-        <div class="modal-content glass-panel">
-            <h3>Редактировать запись</h3>
-            <input type="text" id="edit-title" placeholder="Название">
-            <input type="number" id="edit-amount" placeholder="Сумма">
-            <div class="modal-actions">
-                <button id="cancel-edit" class="secondary-btn">Отмена</button>
-                <button id="save-edit" class="primary-btn">Сохранить</button>
+    <!-- Модалка редактирования -->
+    <div id="edit-modal" class="modal-overlay hidden">
+        <div class="modal glass">
+            <div class="modal-header">
+                <h3>Редактирование</h3>
+                <button id="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="edit-title" class="styled-input" placeholder="Название">
+                <input type="number" id="edit-amount" class="styled-input" placeholder="Сумма">
+            </div>
+            <div class="modal-footer">
+                <button id="save-edit" class="btn btn-primary">Сохранить</button>
             </div>
         </div>
     </div>
