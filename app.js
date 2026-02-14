@@ -4,12 +4,12 @@ import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, 
 
 // --- КОНФИГ ---
 const firebaseConfig = {
-    apiKey: "AIzaSy.....",
-    authDomain: "simpleexpense-lab.firebaseapp.com",
-    projectId: "simpleexpense-lab",
-    storageBucket: "simpleexpense-lab.appspot.com",
-    messagingSenderId: "...",
-    appId: "..."
+  apiKey: "AIzaSyCrnduwAzlj_Qw17GsOAYqs9AhDxZPGUBM",
+  authDomain: "simpleexpense-lab.firebaseapp.com",
+  projectId: "simpleexpense-lab",
+  storageBucket: "simpleexpense-lab.firebasestorage.app",
+  messagingSenderId: "975594715737",
+  appId: "1:975594715737:web:884b43c0a3fc4be9cccf48"
 };
 // -------------
 
