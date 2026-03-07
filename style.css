@@ -162,3 +162,20 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .loader { width: 30px; height: 30px; border: 3px solid var(--border-color); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+/* ... весь ваш предыдущий CSS остается ... */
+
+/* Стили для целей */
+.goals-section { padding: 20px; margin-bottom: 24px; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.mini-icon-btn { background: var(--primary); color: white; border: none; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+.mini-icon-btn:hover { transform: scale(1.1); }
+
+.goal-item { margin-bottom: 15px; }
+.goal-info { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; font-weight: 600; }
+.goal-progress-bg { width: 100%; height: 8px; background: rgba(0,0,0,0.05); border-radius: 10px; overflow: hidden; position: relative; }
+[data-theme="dark"] .goal-progress-bg { background: rgba(255,255,255,0.1); }
+.goal-progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width 1s ease-in-out; border-radius: 10px; }
+.goal-percentage { font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block; text-align: right; }
+
+.goal-item.completed .goal-progress-fill { background: var(--success); }
+.goal-item:last-child { margin-bottom: 0; }
