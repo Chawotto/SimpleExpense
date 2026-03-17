@@ -1,11 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, doc, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
 import { financeUtils } from "./utils.js";
 
 const firebaseConfig = {
-  
+   
 };
 
 const app = initializeApp(firebaseConfig);
@@ -15,11 +14,10 @@ const provider = new GoogleAuthProvider();
 
 let currentUser = null;
 let expensesData = [];
-let goalsData = [];
+let goalsData =[];
 let chartInstance = null;
 let currentCurrency = localStorage.getItem('currency') || 'RUB';
 
-// --- DOM ЭЛЕМЕНТЫ ---
 const els = {
     auth: document.getElementById('auth-section'),
     app: document.getElementById('app-section'),
@@ -29,23 +27,22 @@ const els = {
     currencySelect: document.getElementById('currency-select'),
     avatar: document.getElementById('user-avatar'),
     name: document.getElementById('user-name'),
-
     totalBalance: document.getElementById('total-balance'),
     totalIncome: document.getElementById('total-income'),
     totalExpense: document.getElementById('total-expense'),
     filter: document.getElementById('filter-month'),
-
     form: document.getElementById('expense-form'),
     title: document.getElementById('title-input'),
     amount: document.getElementById('amount-input'),
     category: document.getElementById('category-input'),
     date: document.getElementById('date-input'),
-
     container: document.getElementById('transactions-container'),
     loader: document.getElementById('loader'),
     empty: document.getElementById('empty-state'),
 
+    // Цели
     goalsContainer: document.getElementById('goals-container'),
+    goalsEmptyState: document.getElementById('goals-empty-state'),
     addGoalBtn: document.getElementById('add-goal-btn'),
     goalModal: document.getElementById('goal-modal'),
     closeGoalModal: document.getElementById('close-goal-modal'),
@@ -53,39 +50,41 @@ const els = {
     goalTitleInput: document.getElementById('goal-title'),
     goalTargetInput: document.getElementById('goal-target'),
 
-    // Элементы редактирования
+    // Редактирование
     editModal: document.getElementById('edit-modal'),
     editTitle: document.getElementById('edit-title'),
     editAmount: document.getElementById('edit-amount'),
     saveEdit: document.getElementById('save-edit'),
-    closeEditModal: document.getElementById('close-modal')
+    closeEditModal: document.getElementById('close-modal'),
+
+    // Кастомный Confirm (UX ЛР6)
+    confirmModal: document.getElementById('confirm-modal'),
+    confirmCancelBtn: document.getElementById('cancel-confirm'),
+    confirmOkBtn: document.getElementById('ok-confirm')
 };
 
-// --- КОНФИГУРАЦИЯ ИНТЕРФЕЙСА ---
 const CONFIG = {
-    currencies: {
-        'RUB': { locale: 'ru-RU' },
-        'BYN': { locale: 'be-BY' },
-        'USD': { locale: 'en-US' },
-        'EUR': { locale: 'de-DE' }
-    },
+    currencies: { 'RUB': { locale: 'ru-RU' }, 'BYN': { locale: 'be-BY' }, 'USD': { locale: 'en-US' }, 'EUR': { locale: 'de-DE' } },
     categories: {
-        expense: [
-            { id: 'food', name: 'Еда', icon: 'fa-burger', color: '#EF4444' },
-            { id: 'transport', name: 'Транспорт', icon: 'fa-taxi', color: '#F59E0B' },
-            { id: 'home', name: 'Жилье', icon: 'fa-house', color: '#6366F1' },
-            { id: 'shop', name: 'Шопинг', icon: 'fa-bag-shopping', color: '#EC4899' },
-            { id: 'fun', name: 'Развлечения', icon: 'fa-gamepad', color: '#8B5CF6' }
-        ],
-        income: [
-            { id: 'salary', name: 'Зарплата', icon: 'fa-money-bill-wave', color: '#10B981' },
-            { id: 'gift', name: 'Подарок', icon: 'fa-gift', color: '#3B82F6' },
-            { id: 'other', name: 'Другое', icon: 'fa-circle-plus', color: '#64748B' }
-        ]
+        expense:[ { id: 'food', name: 'Еда', icon: 'fa-burger', color: '#EF4444' }, { id: 'transport', name: 'Транспорт', icon: 'fa-taxi', color: '#F59E0B' }, { id: 'home', name: 'Жилье', icon: 'fa-house', color: '#6366F1' }, { id: 'shop', name: 'Шопинг', icon: 'fa-bag-shopping', color: '#EC4899' }, { id: 'fun', name: 'Развлечения', icon: 'fa-gamepad', color: '#8B5CF6' } ],
+        income:[ { id: 'salary', name: 'Зарплата', icon: 'fa-money-bill-wave', color: '#10B981' }, { id: 'gift', name: 'Подарок', icon: 'fa-gift', color: '#3B82F6' }, { id: 'other', name: 'Другое', icon: 'fa-circle-plus', color: '#64748B' } ]
     }
 };
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+function showConfirmDialog(onConfirm) {
+    els.confirmModal.classList.remove('hidden');
+
+    els.confirmCancelBtn.onclick = () => {
+        els.confirmModal.classList.add('hidden');
+    };
+
+    els.confirmOkBtn.onclick = () => {
+        els.confirmModal.classList.add('hidden');
+        onConfirm();
+    };
+}
+
+
 function formatMoney(amount) {
     const locale = CONFIG.currencies[currentCurrency]?.locale || 'ru-RU';
     return new Intl.NumberFormat(locale, { style: 'currency', currency: currentCurrency }).format(amount);
@@ -99,21 +98,20 @@ function showToast(msg, type = 'success') {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// --- ИНИЦИАЛИЗАЦИЯ ---
 function init() {
-    // Тема
     const savedTheme = localStorage.getItem('theme') || 'light';
     document.body.setAttribute('data-theme', savedTheme);
-
-    // Валюта
     if(els.currencySelect) els.currencySelect.value = currentCurrency;
-
-    // Дата
     if(els.date) els.date.valueAsDate = new Date();
-
     updateCategoryOptions('expense');
-}
 
+    // Добавляем поддержку Enter для радио-кнопок (Accessibility)
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') document.getElementById(btn.getAttribute('for')).click();
+        });
+    });
+}
 init();
 
 // --- АВТОРИЗАЦИЯ ---
@@ -131,39 +129,29 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-// --- СЛУШАТЕЛИ FIREBASE ---
+// --- FIREBASE ---
 function subscribeToFirestore() {
-    els.loader.classList.remove('hidden');
-
-    // Транзакции
     const qExp = query(collection(db, "expenses"), where("uid", "==", currentUser.uid), orderBy("date", "desc"));
     onSnapshot(qExp, (snapshot) => {
-        els.loader.classList.add('hidden');
-        expensesData = [];
+        expensesData =[];
         snapshot.forEach(doc => expensesData.push({ id: doc.id, ...doc.data() }));
         renderAll();
     });
 
-    // Цели
     const qGoals = query(collection(db, "goals"), where("uid", "==", currentUser.uid));
     onSnapshot(qGoals, (snapshot) => {
-        goalsData = [];
+        goalsData =[];
         snapshot.forEach(doc => goalsData.push({ id: doc.id, ...doc.data() }));
         renderGoals();
     });
 }
 
-// --- ОТРИСОВКА (RENDER) ---
-
-// РЕФАКТОРЕННЫЙ RENDER ALL (LR5)
+// --- ОТРИСОВКА ---
 function renderAll() {
-    // Используем вынесенную логику из utils.js
     const totals = financeUtils.calculateTotals(expensesData);
-
     els.totalIncome.innerText = formatMoney(totals.income);
     els.totalExpense.innerText = formatMoney(totals.expense);
     els.totalBalance.innerText = formatMoney(totals.balance);
-
     renderList();
     renderChart();
     renderGoals();
@@ -191,8 +179,8 @@ function renderList() {
                 <span class="t-amount ${item.type === 'income' ? 'income' : 'expense'}">${item.type === 'income' ? '+' : '-'}${formatMoney(item.amount)}</span>
             </div>
             <div class="t-actions">
-                <button class="mini-btn edit" onclick="window.editItem('${item.id}')"><i class="fa-solid fa-pen"></i></button>
-                <button class="mini-btn del" onclick="window.deleteItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
+                <button class="mini-btn edit" onclick="window.editItem('${item.id}')" aria-label="Редактировать"><i class="fa-solid fa-pen"></i></button>
+                <button class="mini-btn del" onclick="window.deleteItem('${item.id}')" aria-label="Удалить"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
         els.container.appendChild(el);
@@ -201,24 +189,29 @@ function renderList() {
 
 function renderGoals() {
     els.goalsContainer.innerHTML = '';
+
+    if (goalsData.length === 0) {
+        els.goalsEmptyState.classList.remove('hidden');
+        return;
+    }
+    els.goalsEmptyState.classList.add('hidden');
+
     const totals = financeUtils.calculateTotals(expensesData);
 
     goalsData.forEach(goal => {
-        // Используем вынесенную логику из utils.js (баг с дробными числами исправлен там)
         const progress = financeUtils.calculateGoalProgress(totals.balance, goal.target);
-
         const div = document.createElement('div');
         div.className = `goal-item ${progress >= 100 ? 'completed' : ''}`;
         div.innerHTML = `
             <div class="goal-info"><span>${goal.title}</span><span>${formatMoney(goal.target)}</span></div>
             <div class="goal-progress-bg"><div class="goal-progress-fill" style="width: ${progress}%"></div></div>
-            <span class="goal-percentage">${progress}% накоплено (из баланса)</span>
+            <span class="goal-percentage">${progress}% накоплено</span>
         `;
         els.goalsContainer.appendChild(div);
     });
 }
 
-
+// --- CRUD ---
 els.form.onsubmit = async (e) => {
     e.preventDefault();
     const type = document.querySelector('input[name="type"]:checked').value;
@@ -238,7 +231,10 @@ els.form.onsubmit = async (e) => {
     } catch (err) { showToast('Ошибка при сохранении', 'error'); }
 };
 
-els.addGoalBtn.onclick = () => els.goalModal.classList.remove('hidden');
+els.addGoalBtn.onclick = () => {
+    els.goalModal.classList.remove('hidden');
+    els.goalTitleInput.focus();
+};
 els.closeGoalModal.onclick = () => els.goalModal.classList.add('hidden');
 
 els.saveGoalBtn.onclick = async () => {
@@ -252,11 +248,11 @@ els.saveGoalBtn.onclick = async () => {
     els.goalTitleInput.value = ''; els.goalTargetInput.value = '';
 };
 
-window.deleteItem = async (id) => {
-    if(confirm('Удалить эту операцию?')) {
+window.deleteItem = (id) => {
+    showConfirmDialog(async () => {
         await deleteDoc(doc(db, "expenses", id));
         showToast('Запись удалена');
-    }
+    });
 };
 
 window.editItem = (id) => {
@@ -266,6 +262,7 @@ window.editItem = (id) => {
     els.editTitle.value = item.title;
     els.editAmount.value = item.amount;
     els.editModal.classList.remove('hidden');
+    els.editTitle.focus();
 };
 
 els.saveEdit.onclick = async () => {
@@ -279,8 +276,7 @@ els.saveEdit.onclick = async () => {
 
 els.closeEditModal.onclick = () => els.editModal.classList.add('hidden');
 
-// --- ИНТЕРФЕЙСНЫЕ ФУНКЦИИ ---
-
+// --- INTERFACE ---
 function updateCategoryOptions(type) {
     els.category.innerHTML = CONFIG.categories[type].map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 }
@@ -294,6 +290,7 @@ els.themeToggle.onclick = () => {
     const next = isDark ? 'light' : 'dark';
     document.body.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
+    els.themeToggle.innerHTML = next === 'dark' ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
 };
 
 els.currencySelect.onchange = (e) => {
@@ -315,41 +312,12 @@ function renderChart() {
         type: 'doughnut',
         data: {
             labels: Object.keys(cats).map(id => CONFIG.categories.expense.find(c => c.id === id)?.name || id),
-            datasets: [{
+            datasets:[{
                 data: Object.values(cats),
-                backgroundColor: ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'],
+                backgroundColor:['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'],
                 borderWidth: 0
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            cutout: '75%'
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' }
     });
-}
-
-function formatDate(dateStr) {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === today.toDateString()) return 'Сегодня';
-    if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
-    return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
-}
-
-function animateValue(obj, end) {
-    const start = parseInt(obj.innerText.replace(/\D/g, '')) || 0;
-    if (start === end) return;
-    const duration = 500;
-    let startTime = null;
-    function step(timestamp) {
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / duration, 1);
-        const current = Math.floor(progress * (end - start) + start);
-        obj.innerText = formatMoney(current);
-        if (progress < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
 }
